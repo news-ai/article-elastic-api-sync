@@ -1,0 +1,1 @@
+source /var/apps/env/bin/activate && cd /var/apps/elastic-api-sync && python sync.py
