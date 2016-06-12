@@ -60,34 +60,41 @@ def get_login_token():
     return token
 
 
+def check_if_article_in_es(url):
+    articles = es.search(index='articles', q='url:"' + url + '"')
+    if articles['hits']['total'] is 1:
+        print 'found'
+        return True
+    return False
+
+
 def sync_articles_es(new_index_name, articles):
     if articles:
         to_append = []
         for article in articles:
             doc = None
-            if articles_collection.find_one({'url': article['url']}) is None:
-                article_data = Article(article['url'])
-                article_data.download()
-                article_data.parse()
-                doc = {
-                    '_type': 'article',
-                    '_index': new_index_name,
-                    'title': article_data.title,
-                    'text': article_data.text,
-                    'url': article['url']
-                }
-                articles_collection.insert_one(doc)
-            else:
-                doc = articles_collection.find_one({'url': article['url']})
-                doc['_index'] = new_index_name
-            if '_id' in doc:
+            if not check_if_article_in_es(article['url']):
+                if articles_collection.find_one({'url': article['url']}) is None:
+                    article_data = Article(article['url'])
+                    article_data.download()
+                    article_data.parse()
+                    doc = {
+                        '_type': 'article',
+                        '_index': new_index_name,
+                        'title': article_data.title,
+                        'text': article_data.text,
+                        'url': article['url']
+                    }
+                    articles_collection.insert_one(doc)
+                else:
+                    doc = articles_collection.find_one({'url': article['url']})
+                    doc['_index'] = new_index_name
+                if '_id' in doc:
+                    del doc['_id']
                 print doc
-                del doc['_id']
-            print doc
-            to_append.append(doc)
-
+                to_append.append(doc)
         res = helpers.bulk(es, to_append)
-        print res
+        return res
 
 
 def get_articles(new_index_name):
@@ -107,7 +114,7 @@ def get_articles(new_index_name):
         r = requests.get(base_url + '/articles/?limit=' + str(offset) + '&offset=' + str(x) + '&fields=url',
                          headers=headers, verify=False)
         article = r.json()
-        sync_articles_es(new_index_name, article['results'])
+        res = sync_articles_es(new_index_name, article['results'])
 
 
 def deploy_new_update():
@@ -117,6 +124,6 @@ def deploy_new_update():
 def reset_elastic():
     es.indices.delete(index='articles', ignore=[400, 404])
     es.indices.create(index='articles', ignore=[400, 404])
-    get_articles('articles')
 
-reset_elastic()
+# reset_elastic()
+deploy_new_update()
