@@ -28,7 +28,6 @@ client = MongoClient(connect=False)
 db = client.elastic_sync
 articles_collection = db.articles
 
-
 # Context Setup
 base_url = 'https://context.newsai.org/api'
 
@@ -63,14 +62,14 @@ def get_login_token():
 def check_if_article_in_es(url):
     articles = es.search(index='articles', q='url:"' + url + '"')
     if articles['hits']['total'] is 1:
-        print 'found'
         return True
     return False
 
 
-def sync_articles_es(new_index_name, articles):
+def sync_articles_es(articles):
     if articles:
         to_append = []
+        has_completed_article = False
         for article in articles:
             doc = None
             if not check_if_article_in_es(article['url']):
@@ -80,7 +79,7 @@ def sync_articles_es(new_index_name, articles):
                     article_data.parse()
                     doc = {
                         '_type': 'article',
-                        '_index': new_index_name,
+                        '_index': 'articles',
                         'title': article_data.title,
                         'text': article_data.text,
                         'url': article['url']
@@ -88,16 +87,18 @@ def sync_articles_es(new_index_name, articles):
                     articles_collection.insert_one(doc)
                 else:
                     doc = articles_collection.find_one({'url': article['url']})
-                    doc['_index'] = new_index_name
+                    doc['_index'] = 'articles'
                 if '_id' in doc:
                     del doc['_id']
                 print doc
                 to_append.append(doc)
+            else:
+                has_completed_article = True
         res = helpers.bulk(es, to_append)
-        return res
+        return (res, has_completed_article)
 
 
-def get_articles(new_index_name):
+def get_articles():
     token = get_login_token()
     headers = {
         "content-type": "application/json",
@@ -114,11 +115,22 @@ def get_articles(new_index_name):
         r = requests.get(base_url + '/articles/?limit=' + str(offset) + '&offset=' + str(x) + '&fields=url',
                          headers=headers, verify=False)
         article = r.json()
-        res = sync_articles_es(new_index_name, article['results'])
+        res, has_completed_article = sync_articles_es(article['results'])
+        if has_completed_article:
+            return True
+    return True
+
+
+def process_single_article(url):
+    articles = [{
+        'url': url
+    }]
+    res, has_completed_article = sync_articles_es(articles)
+    return (res, has_completed_article)
 
 
 def deploy_new_update():
-    get_articles('articles')
+    get_articles()
 
 
 def reset_elastic():
