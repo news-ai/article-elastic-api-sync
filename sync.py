@@ -9,6 +9,7 @@ import certifi
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from elasticsearch import Elasticsearch, helpers
 from newspaper import Article
+from pymongo import MongoClient
 
 # Imports from app
 from middleware.config import (
@@ -64,7 +65,7 @@ def sync_articles_es(new_index_name, articles):
         to_append = []
         for article in articles:
             doc = None
-            if seen_collection.find_one({'url': article['url']}) is None:
+            if articles_collection.find_one({'url': article['url']}) is None:
                 article_data = Article(article['url'])
                 article_data.download()
                 article_data.parse()
@@ -75,10 +76,14 @@ def sync_articles_es(new_index_name, articles):
                     'text': article_data.text,
                     'url': article['url']
                 }
-                articles_collection.insert_one(post)
+                articles_collection.insert_one(doc)
             else:
-                doc = seen_collection.find_one({'url': article['url']})
+                doc = articles_collection.find_one({'url': article['url']})
                 doc['_index'] = new_index_name
+            if '_id' in doc:
+                print doc
+                del doc['_id']
+            print doc
             to_append.append(doc)
 
         res = helpers.bulk(es, to_append)
