@@ -22,6 +22,11 @@ from middleware.config import (
 urllib3.disable_warnings()
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
+# MongoDB setup
+client = MongoClient(connect=False)
+db = client.elastic_sync
+articles_collection = db.articles
+
 
 # Context Setup
 base_url = 'https://context.newsai.org/api'
@@ -58,17 +63,24 @@ def sync_articles_es(new_index_name, articles):
     if articles:
         to_append = []
         for article in articles:
-            article = Article(article['url'])
-            article.download()
-            article.parse()
-            doc = {
-                '_type': 'article',
-                '_index': new_index_name,
-                'title': article.title,
-                'text': article.text,
-            }
-            print doc
+            doc = None
+            if seen_collection.find_one({'url': article['url']}) is None:
+                article_data = Article(article['url'])
+                article_data.download()
+                article_data.parse()
+                doc = {
+                    '_type': 'article',
+                    '_index': new_index_name,
+                    'title': article_data.title,
+                    'text': article_data.text,
+                    'url': article['url']
+                }
+                articles_collection.insert_one(post)
+            else:
+                doc = seen_collection.find_one({'url': article['url']})
+                doc['_index'] = new_index_name
             to_append.append(doc)
+
         res = helpers.bulk(es, to_append)
         print res
 
@@ -84,7 +96,7 @@ def get_articles(new_index_name):
     r = requests.get(base_url + '/articles/',
                      headers=headers, verify=False)
     articles = r.json()
-    offset = 20
+    offset = 100
     for x in range(0, articles['count'], offset):
         print x
         r = requests.get(base_url + '/articles/?limit=' + str(offset) + '&offset=' + str(x) + '&fields=url',
@@ -100,6 +112,6 @@ def deploy_new_update():
 def reset_elastic():
     es.indices.delete(index='articles', ignore=[400, 404])
     es.indices.create(index='articles', ignore=[400, 404])
-    get_articles()
+    get_articles('articles')
 
-deploy_new_update()
+reset_elastic()
