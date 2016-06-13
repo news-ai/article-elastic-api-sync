@@ -62,6 +62,7 @@ def get_login_token():
 def check_if_article_in_es(url):
     articles = es.search(index='articles', q='url:"' + url + '"')
     if articles['hits']['total'] is 1:
+        print 'Found!'
         return True
     return False
 
@@ -109,15 +110,16 @@ def get_articles():
     r = requests.get(base_url + '/articles/',
                      headers=headers, verify=False)
     articles = r.json()
+    starting_number = 8000
     offset = 100
-    for x in range(0, articles['count'], offset):
+    for x in range(starting_number, articles['count'], offset):
         print x
         r = requests.get(base_url + '/articles/?limit=' + str(offset) + '&offset=' + str(x) + '&fields=url',
                          headers=headers, verify=False)
         article = r.json()
         res, has_completed_article = sync_articles_es(article['results'])
-        if has_completed_article:
-            return True
+        # if has_completed_article:
+        # return True
     return True
 
 
