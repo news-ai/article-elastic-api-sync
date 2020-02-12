@@ -2,7 +2,7 @@ APScheduler==3.1.0
 beautifulsoup4==4.4.1
 certifi==2016.2.28
 cssselect==0.9.1
-Django==1.9.7
+Django==1.11.28
 elasticsearch==2.3.0
 feedfinder2==0.0.4
 feedparser==5.2.1
